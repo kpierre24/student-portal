@@ -1,0 +1,1 @@
+async function n(t,r={},{baseUrl:a=""}={}){try{const e=await fetch(`${a}${t}`,{headers:{"Content-Type":"application/json",...r.headers},...r}),s=await e.json();return e.ok?{success:!0,data:s}:{success:!1,error:s.error||`HTTP ${e.status}: ${e.statusText}`}}catch(e){return{success:!1,error:e instanceof Error?e.message:"Network request failed"}}}export{n as a};
