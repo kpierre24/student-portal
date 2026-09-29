@@ -1,18 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { LogoImage } from './LogoImage';
-import { PWAInstallButton } from './PWAInstallButton';
 import { NotificationCenter } from './NotificationCenter';
 import { SyncIndicator } from './SyncIndicator';
 import {
   GraduationCap,
   ChevronDown,
   MessageSquare,
-  MoreHorizontal,
   Sparkles,
   Play,
   Search,
-  Cloud,
-  RefreshCw,
   Radio,
   ShieldCheck,
   Users,
@@ -21,7 +17,6 @@ import {
   LogOut,
   Lock,
   Menu,
-  Command,
 } from 'lucide-react';
 import { AppUser } from '../lib/userAuth';
 import { TabType, AppNotification, Cohort } from '../types';
@@ -46,11 +41,16 @@ export interface AppHeaderProps {
   onOpenPresentation: () => void;
   onOpenCommandPalette: () => void;
   onOpenRoleSwitch: () => void;
-  isCloudSyncing: boolean;
-  onPushToCloud: () => void;
-  dataSource: string;
-  isLoading: boolean;
-  onLoadSheets: (e?: React.FormEvent, customUrl?: string) => void;
+  /** @deprecated Cloud sync actions moved to the sidebar. Kept for prop compatibility. */
+  isCloudSyncing?: boolean;
+  /** @deprecated Cloud sync actions moved to the sidebar. Kept for prop compatibility. */
+  onPushToCloud?: () => void;
+  /** @deprecated Sheet sync controls moved to the sidebar. Kept for prop compatibility. */
+  dataSource?: string;
+  /** @deprecated Sheet sync controls moved to the sidebar. Kept for prop compatibility. */
+  isLoading?: boolean;
+  /** @deprecated Sheet sync controls moved to the sidebar. Kept for prop compatibility. */
+  onLoadSheets?: (e?: React.FormEvent, customUrl?: string) => void;
   onOpenBroadcast: () => void;
   onOpenAuditLog: () => void;
   onOpenUserManagement: () => void;
@@ -63,51 +63,42 @@ export interface AppHeaderProps {
   pendingOfflineCount?: number;
 }
 
-const ROLE_COLORS: Record<string, { avatar: string; label: string; dot: string }> = {
+const ROLE_COLORS: Record<string, { avatar: string; label: string }> = {
   super_admin: {
     avatar: 'bg-purple-700 text-white dark:bg-purple-950 dark:text-purple-200',
     label: 'text-purple-700 dark:text-purple-300',
-    dot: 'bg-purple-600',
   },
   admin: {
     avatar: 'bg-[#023264] text-white dark:bg-[#dceaf8] dark:text-[#023264]',
     label: 'text-[#025798] dark:text-[#7dd3fc]',
-    dot: 'bg-[#025798]',
   },
   registrar: {
     avatar: 'bg-blue-600 text-white dark:bg-blue-950 dark:text-blue-200',
     label: 'text-blue-600 dark:text-blue-400',
-    dot: 'bg-blue-500',
   },
   lecturer: {
     avatar: 'bg-[#01883c] text-white dark:bg-[#d1fae5] dark:text-[#01883c]',
     label: 'text-[#01883c] dark:text-[#4ade80]',
-    dot: 'bg-[#01883c]',
   },
   teacher: {
     avatar: 'bg-[#01883c] text-white dark:bg-[#d1fae5] dark:text-[#01883c]',
     label: 'text-[#01883c] dark:text-[#4ade80]',
-    dot: 'bg-[#01883c]',
   },
   student: {
     avatar: 'bg-[#b38f53] text-white dark:bg-[#fef3c7] dark:text-[#8c6a32]',
     label: 'text-[#b38f53] dark:text-[#dfc18b]',
-    dot: 'bg-[#b38f53]',
   },
   finance_officer: {
     avatar: 'bg-emerald-700 text-white dark:bg-emerald-950 dark:text-emerald-200',
     label: 'text-emerald-700 dark:text-emerald-400',
-    dot: 'bg-emerald-600',
   },
   librarian: {
     avatar: 'bg-amber-600 text-white dark:bg-amber-950 dark:text-amber-200',
     label: 'text-amber-600 dark:text-amber-400',
-    dot: 'bg-amber-500',
   },
   viewer: {
     avatar: 'bg-slate-600 text-white dark:bg-slate-800 dark:text-slate-300',
     label: 'text-slate-600 dark:text-slate-400',
-    dot: 'bg-slate-500',
   },
 };
 
@@ -119,45 +110,55 @@ export function AppHeader({
   filteredNotifications, onMarkNotifAsRead, onMarkAllNotifsAsRead,
   onClearNotifs, onSelectNotif, onTriggerNotifScan, onAddTestNotif,
   onOpenIntro, onOpenPresentation, onOpenCommandPalette, onOpenRoleSwitch,
-  isCloudSyncing, onPushToCloud, dataSource, isLoading, onLoadSheets,
   onOpenBroadcast, onOpenAuditLog, onOpenUserManagement, onOpenSettings, onOpenHelp,
   onToggleMobileDrawer, onOpenOfflineDrawer, onOpenPINCheckin,
   isOffline = false, pendingOfflineCount = 0,
 }: AppHeaderProps) {
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
+  // Close on outside click
   useEffect(() => {
-    if (!showMoreMenu) return;
+    if (!showUserMenu) return;
     const handler = (e: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setShowMoreMenu(false);
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [showMoreMenu]);
+  }, [showUserMenu]);
 
+  // Close on Escape
   useEffect(() => {
-    if (!showMoreMenu) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowMoreMenu(false); };
+    if (!showUserMenu) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowUserMenu(false); };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showMoreMenu]);
+  }, [showUserMenu]);
 
   const rc = appUser ? (ROLE_COLORS[appUser.role] ?? ROLE_COLORS.student) : null;
 
   return (
     <header className="relative bg-white/85 dark:bg-[#08182c]/90 backdrop-blur-xl border-b border-slate-200/80 dark:border-[#1a385c] px-3 sm:px-4 py-2 sm:py-2.5 shadow-xs mb-3 flex-shrink-0 sticky top-2 z-40 max-w-full overflow-visible transition-all rounded-xl">
+      {/* Accent underline gradient */}
       <div className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[#023264]/0 via-[#025798]/60 via-[#b38f53]/70 to-[#0277b8]/0 pointer-events-none" />
+
       <div className="flex items-center justify-between gap-2 sm:gap-3 flex-nowrap">
+
+        {/* ── Left: Logo + Org Name + Cohort Badge ── */}
         <div className="flex items-center gap-2 sm:gap-3 cursor-pointer min-w-0 shrink group" onClick={onGoHome}>
-          <LogoImage alt="HTEIM Logo" className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-xl object-contain bg-transparent p-0 group-hover:opacity-80 transition-opacity" />
+          <LogoImage
+            alt="HTEIM Logo"
+            className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-xl object-contain bg-transparent p-0 group-hover:opacity-80 transition-opacity"
+          />
           <div className="min-w-0 shrink flex items-center gap-1.5 sm:gap-2">
             <h1 className="font-display text-xs sm:text-base font-extrabold tracking-tight text-slate-900 dark:text-white truncate">
               <span className="hidden sm:inline">HTEIM School of Ministry</span>
               <span className="sm:hidden">HTEIM</span>
             </h1>
+
+            {/* Cohort pill — interactive for admin, static badge for others */}
             {appUser && appUser.role === 'admin' ? (
               <button
                 type="button"
@@ -183,31 +184,33 @@ export function AppHeader({
           </div>
         </div>
 
+        {/* ── Right: Action Controls ── */}
         <div className="flex items-center gap-1 sm:gap-1.5 ml-auto shrink-0 flex-nowrap justify-end">
-          {/* Persistent Sync Status Indicator (Step 7.2) */}
+
+          {/* Sync / Offline status indicator */}
           <SyncIndicator
             isOnline={!isOffline}
-            isSyncing={isCloudSyncing}
-            pendingCount={pendingOfflineCount || 0}
+            isSyncing={false}
+            pendingCount={pendingOfflineCount}
             onClick={onOpenOfflineDrawer}
           />
 
-          {/* Quick Global Search Button (⌘K) */}
+          {/* Global Search / Command Palette shortcut */}
           <button
             type="button"
             onClick={onOpenCommandPalette}
-            className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+            className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             title="Global Search & Commands (⌘K)"
-            aria-label="Search"
+            aria-label="Open command palette"
           >
             <Search className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Search</span>
-            <kbd className="text-[9px] font-mono px-1 py-0.2 bg-white dark:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded text-slate-400 font-semibold shadow-2xs">
+            <kbd className="text-[9px] font-mono px-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded text-slate-400 font-semibold shadow-2xs">
               ⌘K
             </kbd>
           </button>
 
-          <div className="hidden sm:block"><PWAInstallButton /></div>
+          {/* Messages & Notifications (logged-in only) */}
           {appUser && (
             <>
               <button
@@ -232,125 +235,183 @@ export function AppHeader({
                 onSelectNotification={onSelectNotif}
                 onTriggerScan={onTriggerNotifScan}
                 onAddTestNotification={onAddTestNotif}
-                currentRole={appUser?.role}
-                currentStudentName={appUser?.studentName || appUser?.name}
+                currentRole={appUser.role}
+                currentStudentName={appUser.studentName || appUser.name}
               />
             </>
           )}
 
-          <div className="relative shrink-0" ref={moreMenuRef}>
-            <button
-              onClick={() => setShowMoreMenu(prev => !prev)}
-              className="p-2 rounded-lg transition-colors cursor-pointer text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
-              aria-label="More actions"
-              aria-expanded={showMoreMenu}
-              aria-haspopup="true"
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
-            {showMoreMenu && (
-              <div className="absolute right-0 top-full mt-1.5 w-64 max-w-[calc(100vw-2rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-1.5 z-40 space-y-0.5" style={{ boxShadow: 'var(--md-elev-2)' }}>
-                <div className="space-y-0.5">
-                  <button onClick={() => { setShowMoreMenu(false); onOpenIntro(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" /><span>Play Intro (6s)</span>
-                  </button>
-                  <button onClick={() => { setShowMoreMenu(false); onOpenPresentation(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
-                    <Play className="w-3.5 h-3.5 text-slate-500" /><span>30s Demo</span>
-                  </button>
-                  <button onClick={() => { setShowMoreMenu(false); onOpenCommandPalette(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
-                    <Search className="w-3.5 h-3.5 text-slate-500" /><span>Search</span>
-                    <span className="ml-auto text-[10px] text-slate-400 font-mono">⌘K</span>
-                  </button>
-                </div>
-                {appUser?.role === 'admin' && (
-                  <div className="space-y-0.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-2 pt-1">Tools</p>
-                    <button onClick={() => { setShowMoreMenu(false); onPushToCloud(); }} disabled={isCloudSyncing} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed">
-                      {isCloudSyncing ? <RefreshCw className="w-3.5 h-3.5 text-slate-500 animate-spin" /> : <Cloud className="w-3.5 h-3.5 text-slate-500" />}
-                      <span>Cloud Backup</span>
-                    </button>
-                    {dataSource === 'sheets' && (
-                      <button onClick={() => { setShowMoreMenu(false); onLoadSheets(); }} disabled={isLoading} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed">
-                        <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${isLoading ? 'animate-spin' : ''}`} /><span>Sync Sheets</span>
+          {/* ── User Account Menu OR Sign-in ── */}
+          <div className="relative shrink-0" ref={userMenuRef}>
+            {appUser ? (
+              <>
+                {/* Logged-in: Avatar pill trigger */}
+                <button
+                  type="button"
+                  id="user-menu-trigger"
+                  onClick={() => setShowUserMenu(prev => !prev)}
+                  className="flex items-center gap-1.5 sm:gap-2 p-1 pr-2 sm:pr-2.5 rounded-full transition-all cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#0e2540] border border-slate-200/80 dark:border-[#1a385c]"
+                  aria-label={`User account: ${appUser.name}`}
+                  aria-expanded={showUserMenu}
+                  aria-haspopup="true"
+                  title="Account, Workspace & Role Settings"
+                >
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shadow-2xs ${rc?.avatar ?? ''}`}>
+                    {appUser.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="hidden sm:flex flex-col text-left leading-none pr-0.5">
+                    <span className="text-xs font-bold truncate max-w-[100px]">{appUser.name.split(' ')[0]}</span>
+                    <span className={`text-[9px] font-bold uppercase tracking-wider ${rc?.label ?? 'text-slate-400'}`}>{appUser.role}</span>
+                  </div>
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown Panel */}
+                {showUserMenu && (
+                  <div
+                    role="menu"
+                    aria-labelledby="user-menu-trigger"
+                    className="absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-2xl p-2 z-50 animate-fade-slide-up"
+                    style={{ boxShadow: '0 20px 40px -8px rgba(0,0,0,0.15), 0 8px 16px -4px rgba(0,0,0,0.08)' }}
+                  >
+                    {/* Identity Card */}
+                    <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800 mb-1">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-xs shrink-0 ${rc?.avatar ?? ''}`}>
+                          {appUser.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{appUser.name}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                            {(appUser as any).email || appUser.studentName || 'HTEIM Portal'}
+                          </p>
+                          <span className={`inline-block text-[9px] font-extrabold uppercase tracking-wider mt-1 px-1.5 py-0.5 rounded-full bg-white dark:bg-slate-700 border border-slate-200/80 dark:border-slate-600 ${rc?.label ?? 'text-slate-400'}`}>
+                            {appUser.role}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setShowUserMenu(false); onOpenLogin(); }}
+                        className="mt-2.5 w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 transition-colors cursor-pointer"
+                      >
+                        <Settings className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Account Settings</span>
                       </button>
+                    </div>
+
+                    {/* Switch Role */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setShowUserMenu(false); onOpenRoleSwitch(); }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-indigo-500" />
+                      <span>Switch Role / View As</span>
+                    </button>
+
+                    {/* Admin-only section */}
+                    {appUser.role === 'admin' && (
+                      <div className="mt-1 pt-1.5 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-2.5 py-0.5">Admin Tools</p>
+                        {[
+                          { icon: <Radio className="w-3.5 h-3.5 text-slate-500" />, label: 'Broadcast Announcements', action: onOpenBroadcast },
+                          { icon: <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />, label: 'Audit Log', action: onOpenAuditLog },
+                          { icon: <Users className="w-3.5 h-3.5 text-slate-500" />, label: 'User Management', action: onOpenUserManagement },
+                          { icon: <Settings className="w-3.5 h-3.5 text-slate-500" />, label: 'Portal Settings', action: onOpenSettings },
+                        ].map(({ icon, label, action }) => (
+                          <button
+                            key={label}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setShowUserMenu(false); action(); }}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                          >
+                            {icon}
+                            <span>{label}</span>
+                          </button>
+                        ))}
+                        {onOpenPINCheckin && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setShowUserMenu(false); onOpenPINCheckin(); }}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
+                            <span>Live QR & PIN Check-in</span>
+                          </button>
+                        )}
+                      </div>
                     )}
-                    <button onClick={() => { setShowMoreMenu(false); onOpenBroadcast(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
-                      <Radio className="w-3.5 h-3.5 text-slate-500" /><span>Broadcast</span>
-                    </button>
-                    <button onClick={() => { setShowMoreMenu(false); onOpenAuditLog(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
-                      <ShieldCheck className="w-3.5 h-3.5 text-slate-500" /><span>Audit Log</span>
-                    </button>
-                    <button onClick={() => { setShowMoreMenu(false); onOpenUserManagement(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
-                      <Users className="w-3.5 h-3.5 text-slate-500" /><span>Manage Users</span>
-                    </button>
-                    {onOpenPINCheckin && (
-                      <button onClick={() => { setShowMoreMenu(false); onOpenPINCheckin(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
-                        <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /><span>Live QR & PIN Check-in</span>
+
+                    {/* Help & Resources */}
+                    <div className="mt-1 pt-1.5 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-2.5 py-0.5">Resources</p>
+                      {[
+                        { icon: <Sparkles className="w-3.5 h-3.5 text-amber-500" />, label: 'Interactive Tour (6s)', action: onOpenIntro },
+                        { icon: <Play className="w-3.5 h-3.5 text-slate-500" />, label: '30s Feature Demo', action: onOpenPresentation },
+                        { icon: <HelpCircle className="w-3.5 h-3.5 text-slate-500" />, label: 'Help & Documentation', action: onOpenHelp },
+                      ].map(({ icon, label, action }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => { setShowUserMenu(false); action(); }}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                        >
+                          {icon}
+                          <span>{label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Sign Out */}
+                    <div className="mt-1 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setShowUserMenu(false); onLogout(); }}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5 text-red-500" />
+                        <span>Sign Out</span>
                       </button>
-                    )}
-                    {onOpenOfflineDrawer && (
-                      <button onClick={() => { setShowMoreMenu(false); onOpenOfflineDrawer(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
-                        <RefreshCw className="w-3.5 h-3.5 text-emerald-500" /><span>Offline Sync Drawer</span>
-                      </button>
-                    )}
+                    </div>
                   </div>
                 )}
-                <div className="space-y-0.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-                  {appUser?.role === 'admin' ? (
-                    <button onClick={() => { setShowMoreMenu(false); onOpenSettings(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
-                      <Settings className="w-3.5 h-3.5 text-slate-500" /><span>Settings</span>
-                    </button>
-                  ) : (
-                    <button disabled className="w-full flex items-center justify-between p-2 rounded-lg text-xs font-medium text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-60" title="Settings can only be changed by Administrator">
-                      <div className="flex items-center gap-2.5"><Settings className="w-3.5 h-3.5 text-slate-400 dark:text-slate-600" /><span>Settings</span></div>
-                      <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">Admin Only</span>
-                    </button>
-                  )}
-                  <button onClick={() => { setShowMoreMenu(false); onOpenHelp(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
-                    <HelpCircle className="w-3.5 h-3.5 text-slate-500" /><span>Help</span>
+              </>
+            ) : (
+              <>
+                {/* Guest: Sign In + Help */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => { setShowUserMenu(false); onOpenHelp(); }}
+                    className="hidden sm:inline-flex p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="Help & Documentation"
+                    aria-label="Help"
+                  >
+                    <HelpCircle className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onOpenLogin}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer bg-[#023264] hover:bg-[#025798] text-white font-bold text-xs shadow-xs whitespace-nowrap border border-[#b38f53]/30"
+                    aria-label="Sign In to Portal"
+                    title="Sign in to Student or Faculty Portal"
+                  >
+                    <Lock className="w-3.5 h-3.5 shrink-0 text-[#dfc18b]" />
+                    <span>Sign In</span>
                   </button>
                 </div>
-                <div className="space-y-0.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-                  <button onClick={() => { setShowMoreMenu(false); onOpenRoleSwitch(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">
-                    <Sparkles className="w-3.5 h-3.5 text-slate-500" /><span>Switch Role</span>
-                  </button>
-                  {appUser && (
-                    <button onClick={() => { setShowMoreMenu(false); onLogout(); }} className="w-full flex items-center gap-2.5 p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30">
-                      <LogOut className="w-3.5 h-3.5" /><span>Logout</span>
-                    </button>
-                  )}
-                </div>
-              </div>
+              </>
             )}
           </div>
 
-          {appUser ? (
-            <button
-              onClick={onOpenLogin}
-              className="flex items-center gap-1.5 sm:gap-2 p-1 pr-2 sm:pr-2.5 rounded-full transition-all cursor-pointer shrink-0 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#0e2540] border border-slate-200/80 dark:border-[#1a385c]"
-              aria-label={`Account: ${appUser.name}`}
-              title="Account & Role Settings"
-            >
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shadow-2xs ${rc?.avatar ?? ''}`}>
-                {appUser.name.charAt(0).toUpperCase()}
-              </div>
-              <div className="hidden sm:flex flex-col text-left leading-none pr-0.5">
-                <span className="text-xs font-bold truncate max-w-[100px]">{appUser.name.split(' ')[0]}</span>
-                <span className={`text-[9px] font-bold uppercase tracking-wider ${rc?.label ?? 'text-slate-400'}`}>{appUser.role}</span>
-              </div>
-              <span className={`sm:hidden w-2 h-2 rounded-full shrink-0 ${rc?.dot ?? 'bg-slate-400'}`} aria-hidden="true" />
-            </button>
-          ) : (
-            <button
-              onClick={onOpenLogin}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer shrink-0 bg-[#023264] hover:bg-[#025798] text-white font-bold text-xs shadow-xs whitespace-nowrap border border-[#b38f53]/30"
-              aria-label="Sign In to Portal"
-              title="Sign in to Student or Faculty Portal"
-            >
-              <Lock className="w-3.5 h-3.5 shrink-0 text-[#dfc18b]" /><span>Sign In</span>
-            </button>
-          )}
-
+          {/* Mobile Drawer Toggle (md and below only) */}
           <button
             type="button"
             onClick={onToggleMobileDrawer}

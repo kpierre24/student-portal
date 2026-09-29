@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -22,7 +23,8 @@ import {
   DollarSign,
   MessageSquare,
   FileText,
-  BookOpenCheck
+  BookOpenCheck,
+  ClipboardList,
 } from 'lucide-react';
 import { TabType, Cohort } from '../../types';
 import { AppUser } from '../../lib/userAuth';
@@ -102,6 +104,20 @@ const ROLE_COLORS: Record<string, { avatar: string; label: string; badge: string
   },
 };
 
+/** Roles that are allowed to interact with the cohort switcher */
+const COHORT_ADMIN_ROLES = new Set(['admin', 'super_admin', 'registrar']);
+
+/** Roles that have access to broadcast feature */
+const BROADCAST_ROLES = new Set(['admin', 'super_admin', 'teacher', 'lecturer']);
+
+/** Roles that have access to audit log */
+const AUDIT_ROLES = new Set(['admin', 'super_admin']);
+
+/** Detect platform for keyboard shortcut display */
+const isMac =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.platform);
+const searchShortcut = isMac ? '⌘K' : 'Ctrl+K';
+
 interface NavGroup {
   id: string;
   title: string;
@@ -114,6 +130,42 @@ interface NavGroup {
     badge?: number | string;
     isAlert?: boolean;
   }[];
+}
+
+/** Reusable labeled utility row button for the bottom actions zone */
+function UtilityButton({
+  icon: Icon,
+  label,
+  isCollapsed,
+  onClick,
+  title,
+  iconClassName = 'text-slate-400',
+  labelClassName = '',
+  className = '',
+}: {
+  icon: React.ComponentType<any>;
+  label: string;
+  isCollapsed: boolean;
+  onClick: () => void;
+  title?: string;
+  iconClassName?: string;
+  labelClassName?: string;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${
+        isCollapsed ? 'justify-center px-2' : ''
+      } ${className}`}
+      title={title ?? label}
+      aria-label={label}
+    >
+      <Icon className={`w-4 h-4 shrink-0 ${iconClassName}`} />
+      {!isCollapsed && <span className={`truncate ${labelClassName}`}>{label}</span>}
+    </button>
+  );
 }
 
 export function AppSidebar({
@@ -218,6 +270,13 @@ export function AppSidebar({
 
   const rc = appUser ? (ROLE_COLORS[appUser.role] ?? ROLE_COLORS.student) : null;
 
+  // Role-based feature visibility
+  const canSeeCohort = appUser && COHORT_ADMIN_ROLES.has(appUser.role);
+  const canSeeBroadcast = appUser && BROADCAST_ROLES.has(appUser.role) && onOpenBroadcast;
+  const canSeeAuditLog = appUser && AUDIT_ROLES.has(appUser.role) && onOpenAuditLog;
+  const canSeePINCheckin = onOpenPINCheckin && appUser && (appUser.role === 'admin' || appUser.role === 'teacher' || appUser.role === 'super_admin');
+  const canSeeCloudBackup = appUser && (appUser.role === 'admin' || appUser.role === 'super_admin');
+
   return (
     <aside
       aria-label="Sidebar navigation"
@@ -304,14 +363,13 @@ export function AppSidebar({
                   <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border ${rc?.badge ?? 'bg-slate-100 text-slate-700'}`}>
                     {appUser.role}
                   </span>
-                  {activeCohort && (
+                  {/* #7: Only show cohort switcher for admin-tier roles */}
+                  {activeCohort && canSeeCohort && (
                     <button
                       type="button"
-                      onClick={appUser.role === 'admin' ? onOpenCohortModal : undefined}
-                      className={`text-[9px] text-slate-500 dark:text-slate-400 font-medium truncate ${
-                        appUser.role === 'admin' ? 'hover:underline cursor-pointer' : 'cursor-default'
-                      }`}
-                      title={appUser.role === 'admin' ? 'Click to switch cohort' : undefined}
+                      onClick={onOpenCohortModal}
+                      className="text-[9px] text-slate-500 dark:text-slate-400 font-medium truncate hover:underline cursor-pointer"
+                      title="Click to switch cohort"
                     >
                       · {activeCohort.name.replace('Class of ', "'")}
                     </button>
@@ -343,15 +401,16 @@ export function AppSidebar({
           className={`w-full flex items-center gap-2 py-2 px-2.5 rounded-xl text-xs text-slate-600 dark:text-slate-300 bg-slate-100/90 hover:bg-slate-200/90 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 transition-all cursor-pointer ${
             isCollapsed ? 'justify-center p-2' : ''
           }`}
-          title="Global Search & Quick Actions (⌘K)"
+          title={`Global Search & Quick Actions (${searchShortcut})`}
           aria-label="Search"
         >
           <Search className="w-4 h-4 text-slate-400 shrink-0" />
           {!isCollapsed && (
             <>
               <span className="flex-1 text-left text-slate-500 dark:text-slate-400 font-medium">Quick Search...</span>
+              {/* #9: Platform-aware keyboard shortcut */}
               <kbd className="text-[10px] font-mono px-1.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-slate-400 font-semibold shadow-2xs">
-                ⌘K
+                {searchShortcut}
               </kbd>
             </>
           )}
@@ -359,85 +418,110 @@ export function AppSidebar({
       </div>
 
       {/* 4. Main Scrollable Navigation Links */}
-      <nav 
-        aria-label="Sidebar tab links" 
-        className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-3 py-2 space-y-4"
+      {/* #8: nav element is the landmark; each group gets role=navigation + aria-label for proper screen reader grouping */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto sidebar-scrollbar px-3 py-2 space-y-4"
+        aria-label="Portal navigation"
       >
         {navGroups.map(group => (
-          <div key={group.id} className="space-y-1">
+          <nav
+            key={group.id}
+            aria-label={group.title}
+            className="space-y-1"
+          >
             {!isCollapsed && (
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-2.5 py-1">
+              <p
+                className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-2.5 py-1"
+                aria-hidden="true"
+              >
                 {group.title}
               </p>
             )}
 
-            <div className="space-y-1">
+            <ul className="space-y-1 list-none p-0 m-0">
               {group.items.map(item => {
                 const isActive = activeErpTab === item.id || (item.id === 'home' && activeErpTab === 'home');
                 const Icon = item.icon;
 
                 return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleNavigate(item.id)}
-                    aria-current={isActive ? 'page' : undefined}
-                    title={isCollapsed ? `${item.label} — ${item.description}` : item.description}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer text-left relative group ${
-                      isActive
-                        ? 'bg-gradient-to-r from-[#025798]/15 to-[#025798]/5 dark:from-[#025798]/30 dark:to-[#0277b8]/10 text-[#023264] dark:text-white font-bold border border-[#025798]/30 dark:border-[#0277b8]/40 shadow-xs'
-                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-[#0c223c]/80 border border-transparent'
-                    } ${isCollapsed ? 'justify-center px-2' : ''}`}
-                  >
-                    {/* Active Accent Left Bar */}
-                    {isActive && (
-                      <span className="absolute left-0 top-2 bottom-2 w-1 bg-[#025798] dark:bg-[#7dd3fc] rounded-r-full" />
-                    )}
-
-                    <Icon
-                      className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-105 ${
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => handleNavigate(item.id)}
+                      aria-current={isActive ? 'page' : undefined}
+                      title={isCollapsed ? `${item.label} — ${item.description}` : item.description}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer text-left relative group ${
                         isActive
-                          ? 'text-[#025798] dark:text-[#7dd3fc]'
-                          : 'text-slate-400 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200'
-                      }`}
-                    />
+                          ? 'bg-gradient-to-r from-[#025798]/15 to-[#025798]/5 dark:from-[#025798]/30 dark:to-[#0277b8]/10 text-[#023264] dark:text-white font-bold border border-[#025798]/30 dark:border-[#0277b8]/40 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-[#0c223c]/80 border border-transparent'
+                      } ${isCollapsed ? 'justify-center px-2' : ''}`}
+                    >
+                      {/* #10: Animated sliding active accent bar using motion/react layoutId */}
+                      <AnimatePresence>
+                        {isActive && !isCollapsed && (
+                          <motion.span
+                            layoutId="sidebar-active-bar"
+                            className="absolute left-0 top-2 bottom-2 w-1 bg-[#025798] dark:bg-[#7dd3fc] rounded-r-full"
+                            initial={{ opacity: 0, scaleY: 0.6 }}
+                            animate={{ opacity: 1, scaleY: 1 }}
+                            exit={{ opacity: 0, scaleY: 0.6 }}
+                            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                          />
+                        )}
+                      </AnimatePresence>
 
-                    {!isCollapsed && (
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="truncate">{item.label}</span>
-                          {item.badge !== undefined && (
-                            <span
-                              className={`text-[10px] min-w-4 h-4 px-1.5 rounded-full font-bold flex items-center justify-center shrink-0 ${
-                                item.isAlert
-                                  ? 'bg-[#b38f53] text-white animate-pulse'
-                                  : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                              }`}
-                            >
-                              {item.badge}
-                            </span>
-                          )}
+                      {/* #10: Icon scales up with spring when active */}
+                      <motion.span
+                        animate={isActive ? { scale: 1.1 } : { scale: 1 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                        className="shrink-0 flex items-center"
+                      >
+                        <Icon
+                          className={`w-4 h-4 transition-colors ${
+                            isActive
+                              ? 'text-[#025798] dark:text-[#7dd3fc]'
+                              : 'text-slate-400 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200'
+                          }`}
+                        />
+                      </motion.span>
+
+                      {!isCollapsed && (
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="truncate">{item.label}</span>
+                            {item.badge !== undefined && (
+                              <span
+                                className={`text-[10px] min-w-4 h-4 px-1.5 rounded-full font-bold flex items-center justify-center shrink-0 ${
+                                  item.isAlert
+                                    ? 'bg-[#b38f53] text-white animate-pulse'
+                                    : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                }`}
+                              >
+                                {item.badge}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Collapsed Badge Pill Overlay */}
-                    {isCollapsed && item.badge !== undefined && (
-                      <span className="absolute top-1 right-1 min-w-3.5 h-3.5 px-1 rounded-full bg-[#b38f53] text-white text-[9px] font-bold flex items-center justify-center">
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
+                      {/* Collapsed Badge Pill Overlay */}
+                      {isCollapsed && item.badge !== undefined && (
+                        <span className="absolute top-1 right-1 min-w-3.5 h-3.5 px-1 rounded-full bg-[#b38f53] text-white text-[9px] font-bold flex items-center justify-center">
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  </li>
                 );
               })}
-            </div>
-          </div>
+            </ul>
+          </nav>
         ))}
-      </nav>
+      </div>
 
       {/* 5. Bottom Utilities & Actions Zone */}
       <div className="p-3 border-t border-slate-200/80 dark:border-[#1a385c]/80 space-y-1">
-        {/* Offline Status indicator in sidebar */}
+        {/* Offline Status indicator */}
         {isOffline && (
           <div
             className={`flex items-center gap-2 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/80 text-amber-900 dark:text-amber-200 text-[11px] font-bold ${
@@ -454,75 +538,107 @@ export function AppSidebar({
           </div>
         )}
 
-        {/* Live PIN Check-in Quick Access for Faculty/Admin */}
-        {onOpenPINCheckin && (appUser?.role === 'admin' || appUser?.role === 'teacher') && (
-          <button
-            type="button"
-            onClick={onOpenPINCheckin}
-            className={`w-full flex items-center gap-2.5 p-2 rounded-xl text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer ${
-              isCollapsed ? 'justify-center' : ''
-            }`}
-            title="Open Live QR & PIN Check-in"
-          >
-            <ShieldCheck className="w-4 h-4 text-indigo-500 shrink-0" />
-            {!isCollapsed && <span>Live PIN Check-in</span>}
-          </button>
+        {/* #5: Live Broadcast — surfaced for teacher/admin roles */}
+        {canSeeBroadcast && (
+          <UtilityButton
+            icon={Radio}
+            label="Live Broadcast"
+            isCollapsed={isCollapsed}
+            onClick={onOpenBroadcast}
+            iconClassName="text-red-500"
+            title="Start or join a live broadcast session"
+          />
         )}
 
-        {/* Cloud Sync Backup Quick Button */}
-        {appUser?.role === 'admin' && (
+        {/* #5: Admin Audit Log — surfaced for admin/super_admin roles */}
+        {canSeeAuditLog && (
+          <UtilityButton
+            icon={ClipboardList}
+            label="Audit Log"
+            isCollapsed={isCollapsed}
+            onClick={onOpenAuditLog}
+            iconClassName="text-indigo-500"
+            title="View admin audit trail and system logs"
+          />
+        )}
+
+        {/* Live PIN Check-in Quick Access for Faculty/Admin */}
+        {canSeePINCheckin && (
+          <UtilityButton
+            icon={ShieldCheck}
+            label="Live PIN Check-in"
+            isCollapsed={isCollapsed}
+            onClick={onOpenPINCheckin!}
+            iconClassName="text-indigo-500"
+            title="Open Live QR & PIN Check-in"
+          />
+        )}
+
+        {/* Cloud Sync Backup for admins */}
+        {canSeeCloudBackup && (
           <button
             type="button"
             onClick={onPushToCloud}
             disabled={isCloudSyncing}
-            className={`w-full flex items-center gap-2.5 p-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50 ${
-              isCollapsed ? 'justify-center' : ''
+            className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50 ${
+              isCollapsed ? 'justify-center px-2' : ''
             }`}
             title="Push local changes to Supabase Cloud Backup"
+            aria-label="Cloud Backup"
           >
             {isCloudSyncing ? (
               <RefreshCw className="w-4 h-4 text-[#025798] animate-spin shrink-0" />
             ) : (
               <Cloud className="w-4 h-4 text-slate-400 shrink-0" />
             )}
-            {!isCollapsed && <span>{isCloudSyncing ? 'Syncing...' : 'Cloud Backup'}</span>}
+            {!isCollapsed && <span className="truncate">{isCloudSyncing ? 'Syncing...' : 'Cloud Backup'}</span>}
           </button>
         )}
 
-        {/* Quick Role Switcher / Settings / Help */}
-        <div className="grid grid-cols-3 gap-1 pt-1">
-          <button
-            type="button"
-            onClick={onOpenRoleSwitch}
-            className="flex items-center justify-center p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            title="Switch Role Preview (Student / Faculty / Admin)"
-            aria-label="Switch Role"
-          >
-            <Sparkles className="w-4 h-4 text-amber-500" />
-          </button>
+        {/* Divider before account actions */}
+        <div className="border-t border-slate-200/60 dark:border-slate-700/60 my-1" />
 
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="flex items-center justify-center p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            title="Portal Settings"
-            aria-label="Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+        {/* #1: Labeled utility buttons — Settings, Help, Role Switch */}
+        <UtilityButton
+          icon={Sparkles}
+          label="Switch Role"
+          isCollapsed={isCollapsed}
+          onClick={onOpenRoleSwitch}
+          iconClassName="text-amber-500"
+          title="Switch Role Preview (Student / Faculty / Admin)"
+        />
 
-          <button
-            type="button"
-            onClick={onOpenHelp}
-            className="flex items-center justify-center p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            title="User Guide & System Help"
-            aria-label="Help Guide"
-          >
-            <HelpCircle className="w-4 h-4" />
-          </button>
-        </div>
+        <UtilityButton
+          icon={Settings}
+          label="Settings"
+          isCollapsed={isCollapsed}
+          onClick={onOpenSettings}
+          title="Portal Settings"
+        />
 
-        {/* Expand Sidebar button when collapsed */}
+        <UtilityButton
+          icon={HelpCircle}
+          label="Help & Guide"
+          isCollapsed={isCollapsed}
+          onClick={onOpenHelp}
+          title="User Guide & System Help"
+        />
+
+        {/* #2: Logout button — only shown when user is logged in */}
+        {appUser && (
+          <UtilityButton
+            icon={LogOut}
+            label="Sign Out"
+            isCollapsed={isCollapsed}
+            onClick={onLogout}
+            iconClassName="text-red-400"
+            labelClassName="text-red-600 dark:text-red-400"
+            className="hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-700 dark:hover:text-red-300"
+            title="Sign out of the portal"
+          />
+        )}
+
+        {/* #4: Persistent expand toggle at the bottom when collapsed */}
         {isCollapsed && (
           <button
             type="button"
@@ -535,6 +651,20 @@ export function AppSidebar({
           </button>
         )}
       </div>
+
+      {/* #4: Persistent collapse tab handle on the right edge — always visible regardless of scroll */}
+      <button
+        type="button"
+        onClick={handleToggle}
+        aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full flex items-center justify-center w-4 h-10 rounded-r-lg bg-slate-200/80 dark:bg-[#1a385c]/80 hover:bg-slate-300 dark:hover:bg-[#22488a] text-slate-500 dark:text-slate-300 transition-colors cursor-pointer z-50 shadow-sm"
+      >
+        {isCollapsed
+          ? <ChevronRight className="w-3 h-3" />
+          : <ChevronLeft className="w-3 h-3" />
+        }
+      </button>
     </aside>
   );
 }
